@@ -1,0 +1,82 @@
+channel coin, cancel, tea, coffee, refill
+
+VMCancel = coin -> (tea -> STOP [] coffee -> STOP [] cancel -> STOP)
+
+VMF(max) = 
+    let
+        State(n) = (n > 0) & coin -> (coffee -> State(n-1) [] tea -> State(n-1)) [] cancel -> State(n)
+            []
+            (n == 0) & refill -> State(max)
+    within
+        State(max)
+
+max = 4
+limit = 3
+VMC =
+  let
+    State(n,c) =
+      (c < limit) & coin -> CoinInserted(n,c+1)
+      []
+      refill -> State(max,c)
+    CoinInserted(n,c) = 
+      n > 0 & (tea -> Result(n-1,c-1) [] coffee -> Result(n-1,c-1))
+      []
+      cancel -> State(n,0)
+      []
+      refill -> CoinInserted(max,c)
+--      []
+--      n == 0 & State(n,c)
+      []
+      (c < limit) & coin -> CoinInserted(n,c+1)
+    Result(n,c) =
+      if c > 0 then CoinInserted(n,c) else State(n,c)
+  within
+    State(max,0)
+
+
+VMCALT =
+  let
+    State(n,c) =
+      (c < limit) & coin -> State(n,c+1)
+      []
+      refill -> State(max,c)
+      []
+      n > 0 and c > 0 & (tea -> State(n-1,c-1) [] coffee -> State(n-1,c-1))
+      []
+      (c > 0) & cancel -> State(n,0)
+  within
+    State(max,0)
+
+Safety =
+    let
+        State(c) =
+            c > 0 & (tea -> State(c-1) [] coffee -> State(c-1))
+            []
+            c < limit & coin -> State(c+1)
+            []
+            cancel -> State(0)
+    within
+        State(0)
+
+assert Safety [T= VMC \ {refill}
+
+Cancellable = cancel -> Cancellable
+
+-- We're intentionally ignoring the divergence check here, because we can infinitely refill without ever cancelling
+assert Cancellable [F= VMC \ {coin, refill, tea, coffee}
+
+-- Cancel is definitely available; others may be available, but I don't care
+Cancellable2 =
+    cancel -> Cancellable2
+    []
+    (STOP |~| refill -> Cancellable2)
+    []
+    (STOP |~| coin -> Cancellable2)
+
+assert Cancellable2 [FD= VMC \ {tea,coffee}
+
+DT = VMC \ {coin}
+
+assert DT :[deadlock free]
+assert VMC [FD= VMCALT
+assert VMCALT [FD= VMC

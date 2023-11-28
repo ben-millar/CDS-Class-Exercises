@@ -1,0 +1,5 @@
+channel coin, tea, coffee
+
+VM1 = coin -> (tea -> VM1 [] coffee -> VM1)
+VM2 = coin -> (tea -> VM2 |~| coffee -> VM2)
+VM3 = coin -> (tea -> VM3 |~| coffee -> VM3 |~| STOP)
