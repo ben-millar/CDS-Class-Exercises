@@ -3,3 +3,15 @@ channel coin, tea, coffee
 VM1 = coin -> (tea -> VM1 [] coffee -> VM1)
 VM2 = coin -> (tea -> VM2 |~| coffee -> VM2)
 VM3 = coin -> (tea -> VM3 |~| coffee -> VM3 |~| STOP)
+
+-- Testing bilateral trace refinement of VM1 / VM2
+assert VM1 [T= VM2
+assert VM2 [T= VM1
+
+-- Testing bilateral failure refinement of VM1 / VM2
+assert VM1 [F= VM2 -- This will fail as the failure set of VM2 is not a refinement of the failure set of VM1; i.e., VM2 can fail in more ways
+assert VM2 [F= VM1
+
+-- Testing bilateral failure refinement of VM2 / VM3
+assert VM3 [F= VM2
+assert VM2 [F= VM3 -- This will fail as the failure set of VM3 is not a refinement of that of VM2; i.e., VM3 can fail in more ways than VM2

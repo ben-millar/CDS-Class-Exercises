@@ -1,0 +1,61 @@
+channel up, down, open, close, arrive
+
+LiftController(max) = 
+    let
+        AtFloorOpen(n) = 
+            close -> AtFloorClosed(n)
+            []
+            (n < max) & up -> GoingUp(n)
+            []
+            (n > 0) & down -> GoingDown(n)
+        AtFloorClosed(n) =
+            open -> AtFloorOpen(n)
+            []
+            (n < max) & up -> GoingUp(n)
+            []
+            (n > 0) & down -> GoingDown(n)
+        GoingUp(n) =
+            arrive -> AtFloorOpen(n+1)
+        GoingDown(n) =
+            arrive -> AtFloorOpen(n-1)
+    within
+        AtFloorOpen(0)
+
+Safety(max) =
+    let
+        State(n) =
+            n < max & up -> State(n+1)
+            []
+            n > 0 & down -> State(n-1)
+            []
+            open -> State(n)
+
+    within
+        State(0)
+
+Liveness(max) = 
+    let
+        State(n) =
+            (up -> State(n+1) |~| down -> State(-1))
+    within
+        State(0)
+
+assert Safety(3) [FD= LiftController(3) \ {arrive, close}
+assert Liveness(3) [T= LiftController(3)
+
+-- -- Additional
+-- P = [] e : A @ e -> P(e) -- A is the menu of processes that P is ready to do 
+-- Q = [] e : B @ e -> Q(e) -- B is the menu of processes that Q is ready to do
+
+-- -- aP is the alphabet of processes that P has the responsibility for, but it may not be ready to do
+-- -- aQ is the alphabet of processes that Q has the responsibility for, but it may not be ready to do
+-- P [ aP || aQ ] Q 
+
+-- -- .'. The menu, A, is a subset of the alphabet aP and likewise for B and aQ
+-- -- Anything which we'd like to do must be within A (excluding aP + aQ), B (excluding aQ + aP), or A^B.
+-- P [ aP || aQ ] Q =
+--     ( [] e : diff(A,aQ) @ e -> P(e) [ aP || aQ ] Q )
+--     []
+--     ( [] e : diff(B,aP) @ e -> P [ aP || aQ ] Q(e) )
+--     []
+--     ( [] e : inter(A,B) & e -> P(e) [ aP || aQ ] Q(e) )

@@ -1,0 +1,87 @@
+channel coin, tea, coffee
+
+-- Define vending machines
+VM1 = coin -> (tea -> VM1 [] coffee -> VM1)
+VM2 = coin -> (tea -> VM2 |~| coffee -> VM2)
+VM3 = coin -> ((tea -> VM3 [] coffee -> VM3) |~| STOP)
+
+-- Define people
+Person1 =
+    coin ->
+        (coffee -> Person1 [] tea -> Person1)
+
+Person2 =
+    coin ->
+        (coffee -> Person2 |~| tea -> Person2)
+
+Person3 =
+    coin -> coffee -> Person3
+
+-- Combine concurrently
+all = {coin, tea, coffee}
+Scenario1a = VM1 [ all || all ] Person1
+Scenario2a = VM1 [ all || all ] Person2
+Scenario3a = VM1 [ all || all ] Person3
+Scenario3a' = VM1 [ all || {coin,coffee} ] Person1 -- If tea happens here, we'll enter a deadlock
+
+Scenario1b = VM2 [ all || all ] Person1
+Scenario2b = VM2 [ all || all ] Person2
+Scenario3b = VM2 [ all || all ] Person3
+Scenario3b' = VM2 [ all || {coin,coffee} ] Person1
+
+Scenario1c = VM3 [ all || all ] Person1
+Scenario2c = VM3 [ all || all ] Person2
+Scenario3c = VM3 [ all || all ] Person3
+Scenario3c' = VM3 [ all || {coin,coffee} ] Person1
+
+-- Abstract process
+channel a,b,c,d,e,f
+P =
+    let
+        P1 = a -> P2 [] b -> P3
+        P2 = e -> P1
+        P3 = f -> P1
+    within
+        P1
+
+Q =
+    let
+        Q1 = c -> Q2 [] d -> Q3
+        Q2 = e -> Q1
+        Q3 = f -> Q1
+    within
+        Q1
+
+alphaP = {a,b,e,f}
+alphaQ = {c,d,e,f}
+
+PQ = P [ alphaP || alphaQ ] Q
+
+assert PQ :[deadlock free] -- This will fail
+-- P2 and Q2 can return to P1/Q1 with the event e, while P3 and Q3 can return to P1/Q1 with the event f
+-- If both P and Q transition to the same state (P2+Q2 or P3+Q3), they can return to the base state on the same event
+-- If P and Q both transition to opposing states, there is no single event which can return both states to the base state
+-- and so they will be in a deadlock.
+
+-- Failures = [
+    -- <a,d> {a,b,c,d,e,f}
+    -- <b,c> {a,b,c,d,e,f}
+
+alphaPQ = {a,b,c,d,e,f}
+alphaR = {a,b,c,d}
+
+-- The introduction of R allows us to prevent a deadlock by constraining the possible sequence of events
+-- In other words, the trace set of R is the subset of that of PQ which does not contain the failure set of PQ
+-- .'. their combined traceset contains no failures
+R =
+    a -> c -> R
+    []
+    b -> d -> R
+
+PQR = PQ [ alphaPQ || alphaR ] R
+
+assert PQR :[deadlock free]
+
+S = (a -> c -> e -> S) [] (b -> d -> f -> S) 
+
+assert S [FD= PQR
