@@ -40,12 +40,12 @@ aDoorController = {| detect, rotate |}
 
 DoorController =
     let
-        Rotates(n) =
-            detect?s?p -> Rotates(0)
+        Rotate(n) =
+            detect?s?p -> Rotate(4)
             []
-            n <= 4 & rotate -> Rotates(n+1)
+            n >= 1 & rotate -> Rotate(n-1)
     within
-        Rotates(4)
+        Rotate(0)
 
 aConstraint(p) = { enter.s.p, leave.s.p, detect.s.p | s <- Sides }
 
