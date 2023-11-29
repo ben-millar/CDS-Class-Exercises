@@ -1,0 +1,80 @@
+PersonID = {1,2}
+
+datatype Sides = inside | outside
+
+-- The "Sides . PersonID" after the colon indicate that all of these event types must concern a given value of Sides and of PersonID
+-- (E.g. enter.sides.PersonID, enter.inside.0)
+-- 'detect.s.p' represents the motion sensor controlling the door detecting a person, p, on side s of the door
+channel enter, leave, detect : Sides . PersonID
+channel rotate -- This event represents the door rotating 90 degrees
+
+-- This is the alphabet of actions that the Door process is prepared to handle, or should know about
+aDoor = {| enter, leave, rotate |}
+
+Door =
+    let
+        -- These states represent the values of the 4 quadrants of the door
+        State(Outside,RotatingIn,Inside,RotatingOut) = 
+            empty(Outside) & -- Somebody enters the empty outside segment
+                enter.outside?p ->
+                    State({p},RotatingIn,Inside,RotatingOut)
+            []
+            ( [] p : Outside @ -- Somebody leaves the outside segment
+                leave.outside.p ->
+                    State({},RotatingIn,Inside,RotatingOut) )
+            []
+            empty(Inside) & -- Somebody enters the empty inside segment
+                enter.inside?p ->
+                    State(Outside,RotatingIn,{p},RotatingOut)
+            []
+            ( [] p : Inside @ -- Somebody leaves the inside segment
+                leave.inside.p ->
+                    State(Outside,RotatingIn,{},RotatingOut) )
+            []
+            rotate -> -- The door cycles its states clockwise
+                State(RotatingOut,Outside,RotatingIn,Inside)
+    within
+        State({},{},{},{})
+
+aDoorController = {| detect, rotate |}
+
+DoorController =
+    let
+        Rotates(n) =
+            detect?s?p -> Rotates(0)
+            []
+            n <= 4 & rotate -> Rotates(n+1)
+    within
+        Rotates(4)
+
+aConstraint(p) = { enter.s.p, leave.s.p, detect.s.p | s <- Sides }
+
+Constraint(p) = 
+    let
+        InTheDoor =
+            leave?s!p -> NotInTheDoor
+        
+        NotInTheDoor =
+            detect?s!p ->
+                enter!s!p -> InTheDoor
+    within
+        NotInTheDoor
+
+aAssumption = {| enter, leave, detect |}
+
+-- We're making as assumption that any event in the alphabet aConstraint can be parametrized by any p in PersonID
+-- and that the process Constraint will be prepared to handle the resulting event.
+Assumption = 
+    || p : PersonID @ [aConstraint(p)] Constraint(p)
+-- We cannot make this assumption because, in our application domain, a person cannot perform an 'enter' event without
+-- first triggering a 'detect' event.
+
+aDoorSystem = {| enter, leave, rotate, detect |}
+
+DoorSystem =
+    Door [ aDoor || aDoorController ] DoorController
+
+DoorSystemWithAssumption = 
+    DoorSystem [ aDoorSystem || aAssumption ] Assumption
+
+assert DoorSystemWithAssumption :[deadlock free]

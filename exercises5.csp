@@ -85,3 +85,13 @@ assert PQR :[deadlock free]
 S = (a -> c -> e -> S) [] (b -> d -> f -> S) 
 
 assert S [FD= PQR
+
+-- I'm ready to do a 'call' event to floor 0 with any ([]) Person p
+-- [] p: Person @ call.0.p -- call!0?p
+
+-- I'm ready to do a call to any Floor f with any Person p
+-- [] f: Floor; p: Person @ call.f.p -- call?f?p
+
+--                     v--setOfEvents
+--  || i : {0,1} @ [aFloor(i)] Floor(i)
+--set values-^                   ^- Parametrized process name

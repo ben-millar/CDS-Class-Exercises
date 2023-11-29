@@ -1,0 +1,120 @@
+-- Matchsticks
+-- A pile of 15 matchsticks is placed upon a table. The players then take turns, in each turn removing up to three matchsticks.
+-- A player cannot take more mathes than there are left available. A player must take at least one match at each turn.
+-- The player who takes the last match loses the game.
+
+PlayerID = {0,1}
+
+channel look : PlayerID . {0..15} -- look.i.n: Player i looks to see if there are n matches remaining
+channel take : PlayerID . {0..15} -- take.i.n: Player i removes n matches from the pile
+channel turn, win : PlayerID -- turn.i: The players agree that it is player i's turn -- win.i: player i is declared the winner.
+
+min(i,j) = if i < j then i else j
+max(i,j) = if i > j then i else j
+
+-- Define the alphabet of actions available to the matches
+alphaMatches = {| look, take |} 
+
+Matches =
+    let
+        Remaining(n) =
+            look?p!n -> Remaining(n)
+            []
+            (n > 0) & [] m : {1..n} @ take?p!m -> Remaining(n-m)
+        within
+            Remaining(15)
+
+-- Define the parameterized alphabet of actions available to Player p
+alphaPlayer(p) = {| turn, look.p, take.p, win.p |}
+
+Player(p) =
+    let
+        MyTurn =
+            turn.p -> Look(p)
+
+        Look(p) =
+            look!p?n -> Looked(n)
+
+        Looked(n) =
+            (n > 0) & Act(n)
+            []
+            (n == 0) & win.p -> STOP
+
+        Act(n) =
+            |~| k : {1..min(3,n)} @ take!p!k -> YourTurn
+
+        YourTurn =
+            turn.(p+1)%2 -> MyTurn
+    within
+        MyTurn [] YourTurn
+
+SmartPlayer(p) = 
+    let
+        MyTurn =
+            turn.p -> Look(p)
+
+        Look(p) =
+            look!p?n -> Looked(n)
+
+        Looked(n) =
+            (n > 0) & Act(n)
+            []
+            (n == 0) & win.p -> STOP
+        
+        Act(n) =
+            n % 4 == 0 & take.p.3 -> YourTurn
+            []
+            take.p.max(1, ((n % 4) - 1)) -> YourTurn
+            -- n % 4 == 1 & take.p.1 -> YourTurn
+            -- []
+            -- n % 4 == 2 & take.p.1 -> YourTurn
+            -- []
+            -- n % 4 == 3 & take.p.2 -> YourTurn
+            -- []
+            -- n % 4 == 0 & take.p.3 -> YourTurn
+
+        YourTurn =
+            turn.(p+1)%2 -> MyTurn
+    within
+        MyTurn [] YourTurn
+
+
+
+-- Define the game
+
+-- The alphabet of actions available to both players
+alphaPlayers = {| turn, look, take, win |}
+
+Players =
+    || p : PlayerID @ [alphaPlayer(p)] Player(p)
+-- For players p in PlayerId, be ready for the set of events in alphaPlayer(p) for the process Player(p)
+
+SmartPlayers =
+    || p : PlayerID @ [alphaPlayer(p)] SmartPlayer(p)
+
+Game =
+    Matches [ alphaMatches || alphaPlayers ] Players
+-- Concurrently run the Matches and Players processes with the alphabet of events provided
+
+SmartGame =
+    Matches [ alphaMatches || alphaPlayers ] SmartPlayers
+
+-- Specification
+FirstPlayerWins =
+    let
+        Wins(p) = 
+            (|~| q : PlayerID @ (|~| n : {0..15} @ look.q.n -> Wins(p)))
+            |~|
+            (|~| q : PlayerID @ (|~| n : {0..15} @ take.q.n -> Wins(p)))
+            |~|
+            (|~| q : PlayerID @ (turn.q -> Wins(p)))
+            |~|
+            win.p -> STOP
+    within
+        |~| p : {0,1} @ turn.p -> Wins(p)
+
+
+
+assert FirstPlayerWins [T= SmartGame
+assert FirstPlayerWins [FD= SmartGame
+assert Game :[deadlock free]
