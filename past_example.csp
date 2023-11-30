@@ -1,0 +1,81 @@
+channel a,b,c,d
+
+-- Question 1(a)
+P =
+    let
+        P1 = a -> P2
+        P2 = a -> P2 |~| b -> P3
+        P3 = c -> P1
+    within
+        P1
+
+Q =
+    let
+        Q1 = b -> Q2 [] d -> Q3
+        Q2 = c -> Q1
+        Q3 = b -> Q2 [] d -> Q2
+    within
+        Q1
+
+System = P [| {b,c} |] Q
+
+PQ = 
+    let
+        P1Q1 = a -> P2Q1 [] d -> P1Q3
+        P1Q2 = a -> P2Q2 -- Prevent this state
+        P1Q3 = a -> P2Q3 [] d -> P1Q2 -- Block D
+        P2Q1 = (a -> P2Q1 [] d -> P2Q3) |~| (b -> P3Q2 [] d -> P2Q3)
+        P2Q2 = a -> P2Q2 |~| STOP -- Prevent this state
+        P2Q3 = (a -> P2Q3 [] d -> P2Q2) |~| (b -> P3Q2 [] d -> P2Q2) -- Block D here
+        P3Q1 = d -> P3Q3
+        P3Q2 = c -> P1Q1
+        P3Q3 = d -> P3Q2
+    within
+        P1Q1
+
+-- The below are equivalent:
+-- (a |~| b) [] d
+-- (a [] d) |~| [b [] d]
+
+assert System [FD= PQ
+assert PQ [FD= System
+
+-- Question 1(b)
+Alternate = 
+    let
+        CanDoB =
+            b -> CanDoC -- FlipFlop
+            []
+            c -> CanDoB
+        CanDoC =
+            b -> CanDoC
+            []
+            c -> CanDoB -- FlipFlop
+    within
+        CanDoB [] CanDoC
+
+assert Alternate [T= System \ {a,d}
+
+assert PQ :[deadlock free]
+
+-- Question 1(c)
+R = 
+    let
+        R1 = a -> R2 [] d -> R2
+        R2 = a -> R3
+        R3 = a -> R1
+    within
+        R1
+-- We can prevent deadlocks in PQ by removing the ability to handle D events
+-- 
+
+System2 = PQ [| {a,d} |] R
+
+assert System2 :[deadlock free]
+
+-- PQ {b, c} [| {a,d} |] R {}
+
+-- Question 1(d)
+Liveness = b -> Liveness |~| c-> Liveness
+
+assert Liveness [T= System2 \ {a,d}

@@ -1,0 +1,43 @@
+-- Interleaving:
+-- |||
+-- If we have a parallel combination in which two processes share nothing in their alphabet, we can use the interleave operator |||
+-- Additionally, any disjoint elemnts of each processes alphabets can be performed independently from one another
+-- There is also the indexed version, ||| i : I @ PQ  OR  P ||| Q
+-- They can operate entirely indepedently, however if both are ready to do something, we won't know which one of them did it,
+-- so we'll see an internal choice.
+
+-- Partial Interleaving:
+-- [| |]
+-- P [| S |] Q
+
+-- There are 4 categories of events in partial interleaving:
+-- 1. P knows about it
+-- 2. Q knows about it
+-- 3. P and Q know about it and it's shared
+-- 4. P and Q know about it and it's not shared, so its interleaved
+
+-- SKIP (o)
+-- A way of marking that your process has finished successfully.
+-- The debug line for this is '<tick>' or an actual tick
+
+-- Sequential composition:
+-- P ; Q 
+-- Q is a process that performs as P until it terminates successfully after which it performs as P
+-- If 
+--     P = [] e : A @ e -> P(e)
+-- Then
+--     P ; Q = [] e : A @ e -> ( P(e) ; Q )
+-- For any process Q where
+--     SKIP ; Q = Q
+
+-- Juice = glass -> juice -> SKIP
+-- Cereal = bowl -> cereal -> milk -> SKIP
+-- Coffee = cup -> coffee -> sugar -> SKIP
+-- Breakfast = Juice; Cereal; Coffee 
+
+-- Renaming:
+-- Functional... P [[L]]
+-- Relational... P[a -> b]
+
+-- P /\ Q
+-- This operator allows you to add an external choice to any stage of a process
