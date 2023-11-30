@@ -1,0 +1,116 @@
+-- Question 1 - Medical Accelerator
+
+channel setHigh, setLow         -- Select high/low energy treatment
+channel shieldHigh, shieldLow   -- Select high/low energy shield
+channel beamHigh, beamLow       -- Select high/low energy accelerator beam mode
+channel fire, cancel            -- Fire the beam, or cancel the treatment
+
+-- Fire should not be possible unless both the beam and the shield are in the correct position for high or low energy treatment
+
+System =
+    SetLow ; Ready
+
+Ready = 
+    setHigh -> High [] setLow -> Low
+
+High =
+    (HighTreatment /\ cancel -> SKIP) ; Ready
+
+Low =
+    (LowTreatment /\ cancel -> SKIP) ; Ready
+
+SetHigh =
+    beamHigh -> SKIP ||| shieldHigh -> SKIP
+
+SetLow =
+    beamLow -> SKIP ||| shieldLow -> SKIP
+
+HighTreatment =
+    SetHigh ; fire -> SKIP ; SetLow
+
+-- Dangerous low treatment!
+-- LowTreatment =
+--     fire -> SKIP
+LowTreatment =
+    SetLow ; fire -> SKIP
+
+datatype position = high | low
+
+Safe =
+    let
+        State(b,s) =
+            (b == s) & fire -> State(b,s)
+            []
+            beamHigh -> State(high,s)
+            []
+            beamLow -> State(low,s)
+            []
+            shieldHigh -> State(b,high)
+            []
+            shieldLow -> State(b,low)
+    within
+        State(low,low)
+
+-- This safety check fails. It shows that we're able to fire in a situation where the beam and the shield aren't aligned.
+-- This is because of the assumption that we return our setup to a default state of low, but this allows us to fall out of sequence.
+-- Really, we should re-check these conditions before entering into any safety critical part of the system (like firing a photon beam at somebody)
+assert Safe [T= System \ { setHigh, setLow, cancel }
+
+
+
+-- Question 2 - Bridges
+datatype LOC = A | B | C | D
+channel start, depart, arrive : LOC -- start.l represents us starting at location l, likewise for the other channels
+
+Location(l) =
+    let
+        Here =
+            depart.l -> NotHere
+        
+        NotHere =
+            start.l -> Here
+            []
+            arrive.l -> Here
+    within
+        NotHere
+
+Locations = ||| l : LOC @ Location(l)
+
+channel done
+
+-- This process represents a bridge between l and m that can be used in either direction, but can only be used once overall
+Bridge(l,m) =
+    depart.l -> arrive.m -> done -> STOP
+    []
+    depart.m -> arrive.l -> done -> STOP
+
+bridge(1) = Bridge(A,B)
+bridge(2) = Bridge(A,B)
+bridge(3) = Bridge(B,D)
+bridge(4) = Bridge(B,D)
+bridge(5) = Bridge(A,C)
+bridge(6) = Bridge(B,C)
+bridge(7) = Bridge(C,D)
+
+-- Bridges can only mark 'done' if they all do it together
+Bridges = [| {done} |] b : {1..7} @ bridge(b)
+
+-- 'arrive' and 'depart' events must be shared between at least ONE bridge and at least ONE location
+City =
+    Locations [| {| arrive,depart |} |] Bridges
+
+-- External choice between any of our locations
+Start =
+    [] l : LOC @ start.l -> STOP
+
+OnlyStartAtA =
+    start.A -> STOP
+
+Routes =
+    City [| {| start |} |] Start
+
+-- There is at least one start state from which you cannot succeed; success is not guaranteed
+assert done -> STOP [FD= Routes \ {| start, arrive, depart |}
+
+-- Assert that not only is success guaranteed, but failure is guaranteed. Every trace ends in STOP.
+assert STOP -> [T= Routes \ {| start, arrive, depart |}

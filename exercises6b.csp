@@ -47,6 +47,9 @@ DoorController =
     within
         Rotate(0)
 
+-- Add a reality constraint to enforce:
+-- 1. That a person cannot enter without triggering a detect event
+-- 2. A detect event can only be triggered as long as somebody is in the NotInTheDoor state
 aConstraint(p) = { enter.s.p, leave.s.p, detect.s.p | s <- Sides }
 
 Constraint(p) = 
@@ -77,4 +80,7 @@ DoorSystem =
 DoorSystemWithAssumption = 
     DoorSystem [ aDoorSystem || aAssumption ] Assumption
 
+-- A deadlock is possible here if we have 1 or 2 people, but not if we have more than this.
+-- This is because there is no state where 3 or more people can simultaneously be trapped in the door (given we can fit 1 per segment)
+-- and unable to trigger a detect
 assert DoorSystemWithAssumption :[deadlock free]

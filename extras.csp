@@ -39,5 +39,6 @@
 -- Functional... P [[L]]
 -- Relational... P[a -> b]
 
+-- Interrupt:
 -- P /\ Q
 -- This operator allows you to add an external choice to any stage of a process

@@ -113,8 +113,19 @@ FirstPlayerWins =
     within
         |~| p : {0,1} @ turn.p -> Wins(p)
 
+FirstPlayerWins' =
+    let
+        Wins(p) = 
+            (|~| q : PlayerID @ (turn.q -> Wins(p)))
+            |~|
+            win.p -> STOP
+    within
+        |~| p : {0,1} @ turn.p -> Wins(p)
 
 
 assert FirstPlayerWins [T= SmartGame
 assert FirstPlayerWins [FD= SmartGame
+
+assert FirstPlayerWins' [FD= SmartGame \ {|look, take|} -- Use the pipe operator to hide all completions of look and take (I.e., look.0.3)
+
 assert Game :[deadlock free]
