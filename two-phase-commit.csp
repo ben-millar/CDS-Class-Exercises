@@ -1,0 +1,154 @@
+-- In asynchronous communication, I need some kind of ack from the counterparty to know that they've received the message/s
+
+--           Service
+--    in|             out|
+--   ---|----------------|----
+--   ___|___         ____|____
+--  |Sender |--msg-->|Receiver|
+--  |_______|<--ack--|________|
+--
+-- One-place buffer:
+-- Service = in?m -> out!m -> Service 
+
+-- Service [T= Sender || Media || Receiver \ Internals
+-- This trace refinement here ensures that any value that comes out is one that went in, and that the message out matches the message out.
+-- "You don't do anything that doesn't fit within this trace set"
+-- A trace set gives no guarantees on Liveness. Anything [T= STOP will pass. Trace == Safety
+
+-- "Failure/Divergences refinement talks about what you might refuse to do"
+-- Service [FD= Sender || Media || Receiver \ Internals
+-- If you've done <in.1>, you can't refuse {out.1} (but can refuse {out.2})
+
+-- A perfect service is a process that stores and forwards messages so that:
+--     - No messages are lost.
+--     - The order of messages is preserved.
+
+-- Every piece of buffering in a distributed system multiplies the state space considerably.
+-- We need to limit the state space to ensure it's possible to explore this to validate the system.
+
+-- Confirm =
+--     let
+--         ToConfirm(S) = [] s: S @ confirm!s -> ToConfirm(diff(s,{s}))
+--     within
+--         ToConfirm(CID)
+
+-- equivalent
+
+-- Confirm = ||| c : CID @ confirm!c -> STOP
+
+
+-- Question 3 - Meeting Booking
+
+datatype Person = a_ | b_ | c_ | d_
+datatype Message = invite | accept | reject | confirm | cancel
+
+channel send, receive : Person . Person . Message
+channel attend, notAttend : Person
+
+-- Model the organiser, where p is the person organising and P is the set of attendees
+Organiser(p,P) =
+    let
+        Start = Invite(P)
+
+        Invite(Q) = 
+            ( [] q : Q @ send.p.q.invite -> Invite(diff(Q,{q})) ) -- Send each person in P the invite (recursively, removing the last invited person)
+            []
+            ( Q == {} & Listen({},{}) ) -- Once Q is empty, we should listen for responses
+
+        Listen(A,R) =
+            [] q : P @
+                (   receive.p.q.accept -> Listen(union(A,{q}), R)
+                    []
+                    receive.p.q.reject -> Listen(A, union(R,{q}))
+                    []
+                    A == P & Confirm(P)
+                    []
+                    union(A,R) == P and R != {} & Cancel(P) )
+
+        Confirm(Q) =
+            [] q : Q @ send.p.q.confirm -> Confirm(diff(Q,{q}))
+
+        Cancel(Q) =
+            [] q : Q @ send.p.q.cancel -> Cancel(diff(Q,{q}))
+    within
+        Start
+
+-- Q3(a) The process Listen(A,R) has two parameters. What do these represent? When do their values change?
+-- Answer: The parameters A and R are the sets of accepts and rejects received; their values change whenever a potential attendee responds with accept or reject.
+
+-- Q3(b) What difference would it make if the last two lines of the definition of Listen(A,R) were replaced with the following:
+--  []
+--  R != {} & Cancel(P) )
+-- Answer: This would allow us to cancel the meeting once at the first person cancels, without waiting for all responses.
+
+-- Model a participant
+Participant(p) =
+    let
+        Waiting =
+            receive.p?q!invite -> Invited(q)
+
+        Invited(q) =
+            send.p.q.accept -> Accepted
+            []
+            send.p.q.reject -> Rejected
+
+        Accepted =
+            receive.p?q!confirm -> Attending
+            []
+            receive.p?q!cancel -> NotAttending
+
+        Rejected =
+            receive.p?q!confirm -> NotAttending
+            []
+            receive.p?q!cancel -> NotAttending
+
+        Attending =
+            attend.p -> STOP
+
+        NotAttending =
+            notAttend.p -> STOP
+    within
+        Waiting
+
+Participants(P) = ||| p : P @ Participant(p)
+
+Media =
+    let
+        Medium(p,q) = send.p.q?m -> receive.q.p!m -> Medium(p,q)
+    within
+        ||| p : Person, q: Person @ Medium(p,q)
+
+-- A scenario in which a_ is organising a meeting where participants b_ and c_ are required may be described by:
+Meeting =
+    ( Organiser(a_,{b_,c_}) ||| Participants({b_,c_}) )
+    [| {| send, receive |} |] -- All completions of send and receive
+    Media
+
+-- The protocol cannot guarantee that a meeting will happen, but it will guarantee concensus.
+-- Either all invited participants will attend, or all invited participants do not attend.
+
+-- Q3(c) Using only attend and notAttend events, complete the following to define a process that completely characterises consensus for a set of participants, P:
+-- Consensus(P) = ...
+-- Your process should be allow exactly the traces, failures and divergences associated with this notion of concencus
+-- With regard to the occurance and availability it should be as nondeterministic as possible (minimise hiding); however it should behave as STOP once all of
+-- these events have been performed.
+
+Consensus(P) =
+    let
+        AllAttend(P) = ||| p : P @ attend.p -> STOP
+        AllNotAttend(P) = ||| p : P @ notAttend.p -> STOP
+    within
+        AllAttend(P) |~| AllNotAttend(P)
+
+-- Q3(d) Write a failures-divergences refinement check that can be used to show that the participants in the Meeting procees defined above
+-- will achieve concencus. Some events will need to be hidden. Why does this need to be a FD check rather than a trace check?
+assert Consensus({b_,c_}) [FD= Meeting \ {| send, receive |}
+assert Meeting \ {| send, receive |} [FD= Consensus({b_,c_})
+
+-- We need FD rather than T so we can check the liveness, not just the safety. Trace could pass on a deadlock.
+
+-- Q3(f) Define an organiser that may fail—and never communicate again—at any point at any point. If this happens, each participant will
+-- need to be ready to time out rather than wait forever.
+channel fail
+channel timeout.p : Person
+Organiser2(p,P) = Organiser(p,P) /\ fail -> STOP -- Shortcut using the interrupt operator
